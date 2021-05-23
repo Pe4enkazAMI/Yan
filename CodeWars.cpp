@@ -1,135 +1,204 @@
-#include <string>
 #include <iostream>
-#include <algorithm>
 #include <vector>
-#include <random>
-
+#include <cmath>
 using namespace std;
 
-class Treap {
-    static inline minstd_rand generator;
 
-    struct Node {
-        int priority, value;
-        Node *lhs = nullptr, *rhs = nullptr;
-        int size;
-        Node(int value) : value(value), priority(generator()), size(1) {}
-    } *root = nullptr;
+template <typename T>
+class Polynomial {
+private:
+    std::vector<T> c;
 
-    static int getSize(Node* now) {
-        return now ? now->size : 0;
-    }
-
-    static void update(Node *&now) {
-        if (now) {
-            now->size = getSize(now->lhs) + 1 + getSize(now->rhs);
+    void deleteZeroes() {
+        while (!c.empty() && c.back() == T(0)) {
+            c.pop_back();
         }
-    }
-
-    static Node *merge(Node *a, Node *b) {
-        if (!a || !b) {
-            return a ? a : b;
-        }
-        if (a->priority > b->priority) {
-            a->rhs = merge(a->rhs, b);
-            update(a);
-            return a;
-        } else {
-            b->lhs = merge(a, b->lhs);
-            update(b);
-            return b;
-        }
-    }
-
-    static void split(Node *now, int k, Node *&a, Node *&b) {
-        if (!now) {
-            a = b = nullptr;
-            return;
-        }
-        if (getSize(now->lhs) < k) {
-            split(now->rhs, k - getSize(now->lhs) - 1, now->rhs, b);
-            a = now;
-        } else {
-            split(now->lhs, k, a, now->lhs);
-            b = now;
-        }
-        update(a);
-        update(b);
-    }
-    void death(Node *now) {
-        if (!now) {
-            return;
-        }
-        death(now->lhs);
-        death(now->rhs);
-        delete now;
     }
 
 public:
-    int get(int index) {
-        Node *less, *great, *equal;
-        split(root, index, less, great);
-        split(great, 1, equal, great);
-        int result = equal->value;
-        root = merge(merge(less, equal), great);
-        return result;
+    Polynomial(const std::vector<T>& coefs) : c(coefs) {
+        deleteZeroes();
     }
 
-    /*void insert(int key) {
-        Node *less, *great;
-        split(root, key, less, great);
-        less = merge(less, new Node(key));
-        root = merge(less, great);
+    Polynomial(const T& coef = T()) : c(1, coef) {
+        deleteZeroes();
     }
 
-    void erase(int key) {
-        Node *less, *great, *equal;
-        split(root, key, less, great);
-        split(great, key + 1, equal, great);
-        root = merge(less, great);
-    }*/
-
-    void pushBack(int value) {
-        root = merge(root, new Node(value));
+    template <typename It>
+    Polynomial(It begin, It end) : c(begin, end) {
+        deleteZeroes();
     }
 
-    void toFront(int l, int r) {
-        Node *less, *equal, *great;
-        split(root, l, less, great);
-        split(root, r - l + 1, equal, great);
-        root = merge(merge(equal, less), great);
+    void print() const {
+        for (size_t i = 0; i < c.size(); ++i) {
+            std::cout << c[i] << " ";
+        }
+        std::cout << "\n";
     }
-    ~Treap() {
-        death(root);
+
+    int Degree() const {
+        return static_cast<int>(c.size()) - 1;
+    }
+
+    T operator[] (size_t i) const {
+        if (i >= c.size()) {
+            return T(0);
+        } else {
+            return c[i];
+        }
+    }
+
+    friend bool operator== (const Polynomial& a, const Polynomial& b) {
+        return a.c == b.c;
+    }
+    friend bool operator!= (const Polynomial& a, const Polynomial& b) {
+        return a.c != b.c;
+    }
+
+    Polynomial& operator+= (const Polynomial& target) {
+        if (c.size() < target.c.size()) {
+            c.resize(target.c.size());
+        }
+        for (size_t i = 0; i < target.c.size(); i++) {
+            c[i] += target.c[i];
+        }
+        deleteZeroes();
+        return *this;
+    }
+    Polynomial& operator-= (const Polynomial& target) {
+        if (c.size() < target.c.size()) {
+            c.resize(target.c.size());
+        }
+        for (size_t i = 0; i < target.c.size(); i++) {
+            c[i] -= target.c[i];
+        }
+        deleteZeroes();
+        return *this;
+    }
+
+    friend Polynomial operator+ (Polynomial a, const Polynomial& b) {
+        return a += b;
+    }
+    friend Polynomial operator- (Polynomial a, const Polynomial& b) {
+        return a -= b;
+    }
+
+    typename std::vector<T>::const_iterator begin() const {
+        return c.begin();
+    }
+    typename std::vector<T>::const_iterator end() const {
+        return c.end();
+    }
+
+    T operator() (const T& point) const {
+        T value = T(0);
+        for (int i = Degree(); i >=0; --i) {
+            value = c[i] + point * value;
+        }
+        return value;
+    }
+
+    friend Polynomial operator* (Polynomial lhs, const Polynomial& rhs) {
+        return lhs *= rhs;
+    }
+
+    Polynomial& operator*= (const Polynomial& target) {
+        vector<T> tmp;
+        tmp.resize(Degree() + target.Degree() + 1);
+        for (int i = 0; i <= Degree(); i++) {
+            for (int j = 0; j <= target.Degree(); j++) {
+                tmp[i+j] += c[i]*target[j];
+            }
+        }
+        c = move(tmp);
+        return *this;
+    }
+
+    template <typename U>
+    friend ostream& operator<< (ostream& out, const Polynomial<U>& pol);
+
+    friend Polynomial operator& (const Polynomial& lhs, const Polynomial& rhs) {
+        Polynomial tmp(lhs[0]);
+        auto tmp1(rhs);
+        for (int i = 1; i <= lhs.Degree(); ++i) {
+            tmp += tmp1 * lhs[i];
+            tmp1 *= rhs;
+        }
+        return tmp;
+    }
+
+    friend Polynomial operator/ (const Polynomial& lhs, const Polynomial& rhs) {
+        if (lhs.Degree() < rhs.Degree()) {
+            return T(0);
+        }
+        Polynomial tmp;
+        tmp.c.resize(lhs.Degree() - rhs.Degree() + 1);
+        Polynomial tmp1(lhs);
+        while (tmp1.Degree() >= rhs.Degree()) {
+            T x = tmp1[tmp1.Degree()] / rhs[rhs.Degree()];
+            tmp.c[tmp1.Degree() - rhs.Degree()] = x;
+            vector<T> jopa(tmp1.Degree() - rhs.Degree());
+            jopa.push_back(x);
+            tmp1 -= rhs * jopa;
+        }
+        tmp.deleteZeroes();
+        return tmp;
+    }
+
+    friend Polynomial operator% (const Polynomial& lhs, const Polynomial& rhs) {
+        auto tmp(lhs);
+        tmp -= rhs * (tmp / rhs);
+        return tmp;
+    }
+
+    friend Polynomial operator, (const Polynomial& lhs, const Polynomial& rhs) {
+        if (lhs.Degree() < rhs.Degree()) {
+            return rhs, lhs;
+        }
+        if (rhs.Degree() == -1) {
+            return lhs / lhs[lhs.Degree()];
+        }
+        return rhs, (lhs % rhs);
     }
 };
 
-int main() {
-    ios::ios_base::sync_with_stdio(false);
-    cin.tie(nullptr);
-    freopen("input.txt", "r", stdin);
-
-    int n, m;
-    cin >> n >> m;
-
-    Treap t;
-
-    for (int i = 1; i <= n; ++i)
-        t.pushBack(i);
-
-    for (int i = 0; i < n; ++i) {
-        cout << t.get(i) << " ";
+template <typename T>
+void print(const Polynomial<T>& pol) {
+    for (auto i : pol) {
+        std::cout << i << " ";
     }
-    return 0;
-    for (int i = 0; i < m; ++i) {
-        int l, r;
-        cin >> l >> r;
-        t.toFront(l - 1, r - 1);
-    }
+    std::cout << "\n";
+}
 
-    for (int i = 0; i < n; ++i) {
-        cout << t.get(i) << " ";
+template <typename U>
+ostream& operator<< (ostream& out, const Polynomial<U>& pol) {
+    if (pol.Degree() != -1) {
+        for (int i = pol.Degree(); i >= 0; --i) {
+            if (pol[i] == U(0)) {
+                continue;
+            }
+            if (pol[i] > U(0) && i != pol.Degree()) {
+                out << '+';
+            }
+            if (pol[i] < U(0)) {
+                out << '-';
+            }
+            if (i == 0 || (pol[i] != U(-1) && pol[i] != U(1))) {
+                pol[i] < U(0) ? out << -pol[i] : out << pol[i];
+                if (i >= 1) {
+                    out << '*';
+                }
+            }
+            if (i >= 1) {
+                out << 'x';
+            }
+            if (i >= 2) {
+                out << "^" << i;
+            }
+        }
+        return out;
+    } else {
+        out << U(0);
+        return out;
     }
-
-    return 0;
 }
